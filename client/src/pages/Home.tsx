@@ -1,7 +1,4 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
-import { apiRequest } from "@/lib/queryClient";
+import { useState } from "react";
 import { initialPoems, Poem } from "@/lib/poems";
 import PoetrySection from "@/components/PoetrySection";
 import EditorModal from "@/components/EditorModal";
@@ -15,41 +12,6 @@ export default function Home() {
   const [currentPoemIndex, setCurrentPoemIndex] = useState<number | null>(null);
   const [localPoems, setLocalPoems] = useState<Poem[]>(initialPoems);
   
-  // Fetch poems from the backend
-  const { data: poems, isLoading, isError } = useQuery({
-    queryKey: ['/api/poems'],
-    onSuccess: (data) => {
-      if (data && data.length > 0) {
-        setLocalPoems(data);
-      }
-    },
-    onError: () => {
-      console.error("Failed to fetch poems from API, using initial data");
-    }
-  });
-  
-  // Create new poem mutation
-  const createPoemMutation = useMutation({
-    mutationFn: async (newPoem: Omit<Poem, "id">) => {
-      const res = await apiRequest("POST", "/api/poems", newPoem);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/poems'] });
-    }
-  });
-  
-  // Update poem mutation
-  const updatePoemMutation = useMutation({
-    mutationFn: async ({ id, content }: { id: number; content: string }) => {
-      const res = await apiRequest("PATCH", `/api/poems/${id}`, { content });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/poems'] });
-    }
-  });
-  
   const handleNavigate = (index: number) => {
     document.getElementById(`section-${index}`)?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -62,7 +24,7 @@ export default function Home() {
   const handleSavePoem = (content: string) => {
     if (currentPoemIndex === null) return;
     
-    // Update in local state immediately for better UX
+    // Update only in local state since this is a static version
     setLocalPoems(prev => {
       const newPoems = [...prev];
       newPoems[currentPoemIndex] = {
@@ -72,29 +34,17 @@ export default function Home() {
       return newPoems;
     });
     
-    // Try to update in the backend
-    const poemId = localPoems[currentPoemIndex].id;
-    updatePoemMutation.mutate({ id: poemId, content });
-    
     setEditorOpen(false);
     setCurrentPoemIndex(null);
   };
   
   const handleAddNewSection = () => {
-    const newPoem: Omit<Poem, "id"> = {
+    const newPoem: Poem = {
+      id: localPoems.length + 1,
       content: "Новый текст...",
     };
     
-    // Add to local state immediately for better UX
-    const newPoemWithId: Poem = {
-      ...newPoem,
-      id: localPoems.length + 1 // Temporary ID
-    };
-    
-    setLocalPoems(prev => [...prev, newPoemWithId]);
-    
-    // Try to create in the backend
-    createPoemMutation.mutate(newPoem);
+    setLocalPoems(prev => [...prev, newPoem]);
     
     // Scroll to the new section after a short delay to let the DOM update
     setTimeout(() => {
@@ -133,26 +83,14 @@ export default function Home() {
         
         {/* Poetry Sections */}
         <main className="max-w-3xl mx-auto">
-          {isLoading ? (
-            <div className="text-center py-10">
-              <div className="animate-pulse text-[#00f0ff]">Loading poems...</div>
-            </div>
-          ) : isError ? (
-            <div className="text-center py-10 text-[#ff00a0]">
-              Failed to load poems from server, using local data.
-            </div>
-          ) : (
-            <>
-              {localPoems.map((poem, index) => (
-                <PoetrySection 
-                  key={index}
-                  poem={poem}
-                  index={index}
-                  onEdit={handleEditPoem}
-                />
-              ))}
-            </>
-          )}
+          {localPoems.map((poem, index) => (
+            <PoetrySection 
+              key={index}
+              poem={poem}
+              index={index}
+              onEdit={handleEditPoem}
+            />
+          ))}
           
           {/* Add New Section Button */}
           <div className="flex justify-center mb-16">
